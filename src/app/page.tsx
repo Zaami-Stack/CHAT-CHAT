@@ -43,6 +43,30 @@ type MessageResponse = {
   message: ChatMessage;
 };
 
+function areMessagesEqual(left: ChatMessage[], right: ChatMessage[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index];
+    const rightMessage = right[index];
+    if (!leftMessage || !rightMessage) {
+      return false;
+    }
+    if (
+      leftMessage.id !== rightMessage.id ||
+      leftMessage.content !== rightMessage.content ||
+      leftMessage.sender_email !== rightMessage.sender_email ||
+      leftMessage.created_at !== rightMessage.created_at
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   const map = new Map<number, ChatMessage>();
 
@@ -54,9 +78,15 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
     map.set(message.id, message);
   });
 
-  return Array.from(map.values()).sort(
+  const merged = Array.from(map.values()).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
+
+  if (areMessagesEqual(current, merged)) {
+    return current;
+  }
+
+  return merged;
 }
 
 function formatClock(dateString: string) {
@@ -121,9 +151,23 @@ export default function Home() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const lastMessageIdRef = useRef<number | null>(null);
 
   const myName = normalizeName(nickname);
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
+    const container = messagesRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
+  }, []);
 
   const loadMessages = useCallback(async () => {
     const response = await fetch("/api/messages", { cache: "no-store" });
@@ -200,8 +244,41 @@ export default function Home() {
   }, [authenticated, loadMessages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const lastMessageId = messages[messages.length - 1]?.id ?? null;
+    if (lastMessageIdRef.current === lastMessageId) {
+      return;
+    }
+
+    const firstMessage = lastMessageIdRef.current === null && lastMessageId !== null;
+    lastMessageIdRef.current = lastMessageId;
+
+    if (lastMessageId === null) {
+      setShowJumpToLatest(false);
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (shouldStickToBottomRef.current || firstMessage) {
+        setShowJumpToLatest(false);
+        scrollMessagesToBottom(firstMessage ? "auto" : "smooth");
+      } else {
+        setShowJumpToLatest(true);
+      }
+    });
+  }, [messages, scrollMessagesToBottom]);
+
+  const onMessagesScroll = () => {
+    const container = messagesRef.current;
+    if (!container) {
+      return;
+    }
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distanceFromBottom < 72;
+    shouldStickToBottomRef.current = nearBottom;
+    setShowJumpToLatest(!nearBottom && messages.length > 0);
+  };
 
   const signInWithWord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -300,6 +377,9 @@ export default function Home() {
     setSecretWord("");
     setAuthMessage("");
     setChatMessage("");
+    setShowJumpToLatest(false);
+    shouldStickToBottomRef.current = true;
+    lastMessageIdRef.current = null;
   };
 
   return (
@@ -389,34 +469,49 @@ export default function Home() {
               </button>
             </header>
 
-            <div className="messages">
-              {messages.length === 0 && (
-                <p className="empty">
-                  Start with something sweet. Your messages appear instantly for both
-                  of you.
-                </p>
-              )}
+            <div className="messages-shell">
+              <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+                {messages.length === 0 && (
+                  <p className="empty">
+                    Start with something sweet. Your messages appear instantly for both
+                    of you.
+                  </p>
+                )}
 
-              {messages.map((message) => {
-                const mine =
-                  normalizeName(message.sender_email).toLowerCase() ===
-                  myName.toLowerCase();
-                return (
-                  <div
-                    className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
-                    key={message.id}
-                  >
-                    <article className={`bubble ${mine ? "mine" : "theirs"}`}>
-                      <p>{message.content}</p>
-                      <small>
-                        {mine ? "You" : message.sender_email} -{" "}
-                        {formatClock(message.created_at)}
-                      </small>
-                    </article>
-                  </div>
-                );
-              })}
-              <div ref={bottomRef} />
+                {messages.map((message) => {
+                  const mine =
+                    normalizeName(message.sender_email).toLowerCase() ===
+                    myName.toLowerCase();
+                  return (
+                    <div
+                      className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
+                      key={message.id}
+                    >
+                      <article className={`bubble ${mine ? "mine" : "theirs"}`}>
+                        <p>{message.content}</p>
+                        <small>
+                          {mine ? "You" : message.sender_email} -{" "}
+                          {formatClock(message.created_at)}
+                        </small>
+                      </article>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {showJumpToLatest && (
+                <button
+                  type="button"
+                  className="jump-latest"
+                  onClick={() => {
+                    shouldStickToBottomRef.current = true;
+                    setShowJumpToLatest(false);
+                    scrollMessagesToBottom("smooth");
+                  }}
+                >
+                  Latest
+                </button>
+              )}
             </div>
 
             <form className="composer" onSubmit={sendMessage}>

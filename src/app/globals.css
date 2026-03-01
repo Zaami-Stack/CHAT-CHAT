@@ -188,7 +188,7 @@ body {
 
 .chat-card {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: min(85vh, 900px);
 }
 
@@ -214,12 +214,60 @@ body {
   font-size: 0.86rem;
 }
 
+.messages-shell {
+  position: relative;
+  min-height: 0;
+}
+
 .messages {
+  height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1.15rem 1.3rem;
   display: grid;
   gap: 0.7rem;
   align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 77, 124, 0.65) rgba(255, 255, 255, 0.35);
+}
+
+.messages::-webkit-scrollbar {
+  width: 10px;
+}
+
+.messages::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+}
+
+.messages::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(224, 91, 149, 0.9), rgba(168, 53, 103, 0.9));
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.messages::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(212, 69, 132, 0.96), rgba(145, 41, 86, 0.96));
+}
+
+.jump-latest {
+  position: absolute;
+  right: 1.1rem;
+  bottom: 1rem;
+  border: none;
+  border-radius: 999px;
+  padding: 0.48rem 0.84rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff8fb;
+  background: linear-gradient(128deg, #d55287 0%, #a93d6a 100%);
+  box-shadow: 0 6px 18px rgba(124, 40, 80, 0.35);
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.jump-latest:hover {
+  transform: translateY(-1px);
 }
 
 .empty {
