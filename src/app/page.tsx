@@ -336,10 +336,6 @@ export default function Home() {
           <section className="glass-panel login-card">
             <div>
               <h1 className="title">{CHAT_TITLE}</h1>
-              <p className="subtitle">
-                A private chat for just the two of you. Enter your shared secret
-                word to unlock it.
-              </p>
             </div>
 
             <form className="stack" onSubmit={signInWithWord}>
