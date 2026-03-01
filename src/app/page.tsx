@@ -66,6 +66,8 @@ export default function Home() {
   const [loadingSession, setLoadingSession] = useState(Boolean(supabase));
   const [authEmail, setAuthEmail] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [resendAt, setResendAt] = useState<number>(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -75,6 +77,9 @@ export default function Home() {
   const userEmail = session?.user?.email?.toLowerCase() || "";
   const isAllowed =
     !userEmail || allowedEmails.length === 0 || allowedEmails.includes(userEmail);
+  const secondsLeft = resendAt
+    ? Math.max(0, Math.ceil((resendAt - nowMs) / 1000))
+    : 0;
 
   useEffect(() => {
     if (!supabase) {
@@ -169,9 +174,30 @@ export default function Home() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!resendAt) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      const nextNow = Date.now();
+      setNowMs(nextNow);
+      if (nextNow >= resendAt) {
+        setResendAt(0);
+        window.clearInterval(timer);
+      }
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [resendAt]);
+
   const requestMagicLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) {
+      return;
+    }
+    if (secondsLeft > 0) {
+      setAuthMessage(`Please wait ${secondsLeft}s before requesting another link.`);
       return;
     }
 
@@ -190,10 +216,18 @@ export default function Home() {
     });
 
     if (error) {
-      setAuthMessage(error.message);
+      const raw = error.message.toLowerCase();
+      if (raw.includes("email rate limit exceeded")) {
+        setAuthMessage(
+          "Too many email requests. Wait a bit, then try again. If this is frequent, use custom SMTP in Supabase Auth.",
+        );
+      } else {
+        setAuthMessage(error.message);
+      }
       return;
     }
 
+    setResendAt(Date.now() + 60_000);
     setAuthMessage("Magic link sent. Open your email to continue.");
   };
 
@@ -314,8 +348,12 @@ export default function Home() {
                 placeholder="you@example.com"
                 required
               />
-              <button className="btn btn-primary" type="submit">
-                Send magic link
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={secondsLeft > 0}
+              >
+                {secondsLeft > 0 ? `Wait ${secondsLeft}s` : "Send magic link"}
               </button>
               <p className="hint">{authMessage}</p>
             </form>
