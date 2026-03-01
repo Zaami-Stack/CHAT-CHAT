@@ -269,16 +269,6 @@ export default function Home() {
     [messages],
   );
 
-  const pinnedMessages = useMemo(() => {
-    return [...messages]
-      .filter((message) => message.is_pinned)
-      .sort((left, right) => {
-        const leftDate = left.pinned_at || left.created_at;
-        const rightDate = right.pinned_at || right.created_at;
-        return new Date(rightDate).getTime() - new Date(leftDate).getTime();
-      });
-  }, [messages]);
-
   const typingLabel = useMemo(() => {
     const unique = Array.from(new Set(typingUsers.map((name) => normalizeName(name))));
     if (unique.length === 0) {
@@ -759,22 +749,6 @@ export default function Home() {
     }
   };
 
-  const togglePin = async (message: ChatMessage) => {
-    setBusyMessageActionId(message.id);
-    setChatMessage("");
-    try {
-      await patchMessage({
-        action: "pin",
-        id: message.id,
-        pinned: !message.is_pinned,
-      });
-    } catch (error) {
-      setChatMessage(getErrorMessage(error));
-    } finally {
-      setBusyMessageActionId(null);
-    }
-  };
-
   const startLongPressReply = (
     message: ChatMessage,
     event: TouchEvent<HTMLElement>,
@@ -902,41 +876,6 @@ export default function Home() {
               </button>
             </header>
 
-            {pinnedMessages.length > 0 && (
-              <div className="pinned-strip">
-                <div className="pinned-head">
-                  <span className="pinned-title">Pinned Messages</span>
-                  <span className="pinned-count">{pinnedMessages.length}</span>
-                </div>
-                <div className="pinned-list">
-                  {pinnedMessages.map((message) => {
-                    const mine =
-                      normalizeName(message.sender_email).toLowerCase() === myNameLower;
-                    return (
-                      <button
-                        key={message.id}
-                        type="button"
-                        className={`pinned-item ${mine ? "mine" : "theirs"}`}
-                        onClick={() => {
-                          const target = document.getElementById(`msg-${message.id}`);
-                          target?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }}
-                      >
-                        <div className="pinned-item-top">
-                          <strong>{mine ? "You" : normalizeName(message.sender_email)}</strong>
-                          <small>
-                            {formatDayLabel(message.created_at)} -{" "}
-                            {formatClock(message.created_at)}
-                          </small>
-                        </div>
-                        <p>{previewText(message.content)}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             <div className="messages-shell">
               <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
                 {messages.length === 0 && (
@@ -975,9 +914,7 @@ export default function Home() {
                         className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
                       >
                         <article
-                          className={`bubble ${mine ? "mine" : "theirs"} ${
-                            message.is_pinned ? "pinned" : ""
-                          }`}
+                          className={`bubble ${mine ? "mine" : "theirs"}`}
                           onTouchStart={(event) => startLongPressReply(message, event)}
                           onTouchEnd={clearLongPressReply}
                           onTouchMove={clearLongPressReply}
@@ -1048,15 +985,6 @@ export default function Home() {
                               disabled={busy}
                             >
                               Reply
-                            </button>
-
-                            <button
-                              type="button"
-                              className="reply-btn"
-                              onClick={() => void togglePin(message)}
-                              disabled={busy}
-                            >
-                              {message.is_pinned ? "Unpin" : "Pin"}
                             </button>
 
                             {mine && !message.is_deleted && (
