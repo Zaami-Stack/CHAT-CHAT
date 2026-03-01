@@ -5,6 +5,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 type CreateMessageBody = {
   content?: string;
   sender?: string;
+  replyToId?: number | null;
 };
 
 function unauthorized() {
@@ -17,6 +18,16 @@ function sanitizeName(value: string) {
     return "You";
   }
   return cleaned.slice(0, 40);
+}
+
+function normalizeReplyToId(input: number | null | undefined) {
+  if (input == null) {
+    return null;
+  }
+  if (!Number.isInteger(input) || input <= 0) {
+    return null;
+  }
+  return input;
 }
 
 export async function GET(request: NextRequest) {
@@ -34,11 +45,17 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, content, sender_email, created_at")
+    .select("id, content, sender_email, reply_to_id, created_at")
     .order("created_at", { ascending: true })
     .limit(300);
 
   if (error) {
+    if (error.code === "23503") {
+      return NextResponse.json(
+        { error: "The replied-to message does not exist anymore." },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -74,14 +91,16 @@ export async function POST(request: NextRequest) {
   }
 
   const sender = sanitizeName(body.sender || "");
+  const replyToId = normalizeReplyToId(body.replyToId);
 
   const { data, error } = await supabase
     .from("messages")
     .insert({
       content,
       sender_email: sender,
+      reply_to_id: replyToId,
     })
-    .select("id, content, sender_email, created_at")
+    .select("id, content, sender_email, reply_to_id, created_at")
     .single();
 
   if (error) {

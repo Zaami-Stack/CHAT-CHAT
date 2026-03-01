@@ -320,6 +320,32 @@ body {
   word-break: break-word;
 }
 
+.reply-preview {
+  border-left: 3px solid rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  padding: 0.3rem 0.55rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.reply-preview.theirs {
+  border-left-color: rgba(159, 54, 94, 0.35);
+  background: rgba(248, 227, 235, 0.66);
+}
+
+.reply-preview span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+
+.reply-preview p {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.84;
+}
+
 .bubble small {
   display: block;
   margin-top: 0.35rem;
@@ -327,11 +353,74 @@ body {
   opacity: 0.8;
 }
 
+.bubble-actions {
+  margin-top: 0.38rem;
+}
+
+.reply-btn {
+  border: none;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  cursor: pointer;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.bubble.theirs .reply-btn {
+  background: rgba(159, 54, 94, 0.09);
+}
+
 .composer {
   display: grid;
   gap: 0.58rem;
   border-top: 1px solid rgba(95, 34, 66, 0.14);
   padding: 1rem 1.3rem 1.3rem;
+}
+
+.typing-indicator {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(117, 44, 84, 0.85);
+}
+
+.replying-to {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid rgba(168, 59, 103, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.56);
+  padding: 0.5rem 0.62rem;
+}
+
+.replying-to strong {
+  display: block;
+  font-size: 0.78rem;
+  color: rgba(105, 37, 74, 0.95);
+}
+
+.replying-to p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(74, 36, 58, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.reply-cancel {
+  border: none;
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(161, 51, 98, 0.14);
+  color: rgba(94, 30, 66, 0.94);
 }
 
 .composer-row {

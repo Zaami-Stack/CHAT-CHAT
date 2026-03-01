@@ -3,8 +3,10 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
 } from "react";
 
@@ -12,6 +14,7 @@ type ChatMessage = {
   id: number;
   content: string;
   sender_email: string;
+  reply_to_id: number | null;
   created_at: string;
 };
 
@@ -43,6 +46,10 @@ type MessageResponse = {
   message: ChatMessage;
 };
 
+type TypingResponse = {
+  typing: string[];
+};
+
 function areMessagesEqual(left: ChatMessage[], right: ChatMessage[]) {
   if (left.length !== right.length) {
     return false;
@@ -58,6 +65,7 @@ function areMessagesEqual(left: ChatMessage[], right: ChatMessage[]) {
       leftMessage.id !== rightMessage.id ||
       leftMessage.content !== rightMessage.content ||
       leftMessage.sender_email !== rightMessage.sender_email ||
+      leftMessage.reply_to_id !== rightMessage.reply_to_id ||
       leftMessage.created_at !== rightMessage.created_at
     ) {
       return false;
@@ -148,15 +156,39 @@ export default function Home() {
   });
   const [authMessage, setAuthMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const composerInputRef = useRef<HTMLInputElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const lastMessageIdRef = useRef<number | null>(null);
+  const typingTimerRef = useRef<number | null>(null);
+  const typingSentRef = useRef(false);
+  const lastTypingPingRef = useRef(0);
 
   const myName = normalizeName(nickname);
+  const messagesById = useMemo(
+    () => new Map(messages.map((message) => [message.id, message])),
+    [messages],
+  );
+
+  const typingLabel = useMemo(() => {
+    const unique = Array.from(new Set(typingUsers.map((name) => normalizeName(name))));
+    if (unique.length === 0) {
+      return "";
+    }
+    if (unique.length === 1) {
+      return `${unique[0]} is typing...`;
+    }
+    if (unique.length === 2) {
+      return `${unique[0]} and ${unique[1]} are typing...`;
+    }
+    return `${unique[0]} and others are typing...`;
+  }, [typingUsers]);
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
     const container = messagesRef.current;
@@ -169,11 +201,42 @@ export default function Home() {
     });
   }, []);
 
+  const postTypingStatus = useCallback(
+    async (isTyping: boolean) => {
+      if (!authenticated) {
+        return;
+      }
+
+      await fetch("/api/typing", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sender: myName,
+          isTyping,
+        }),
+      });
+    },
+    [authenticated, myName],
+  );
+
+  const stopTyping = useCallback(() => {
+    if (typingTimerRef.current) {
+      window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    if (typingSentRef.current) {
+      typingSentRef.current = false;
+      void postTypingStatus(false);
+    }
+  }, [postTypingStatus]);
+
   const loadMessages = useCallback(async () => {
     const response = await fetch("/api/messages", { cache: "no-store" });
     if (response.status === 401) {
       setAuthenticated(false);
       setMessages([]);
+      setTypingUsers([]);
+      setReplyTo(null);
       throw new Error("Session expired. Enter the secret word again.");
     }
     if (!response.ok) {
@@ -182,6 +245,27 @@ export default function Home() {
     const data = (await response.json()) as MessagesResponse;
     setMessages((previous) => mergeMessages(previous, data.messages ?? []));
   }, []);
+
+  const loadTyping = useCallback(async () => {
+    const response = await fetch(`/api/typing?self=${encodeURIComponent(myName)}`, {
+      cache: "no-store",
+    });
+
+    if (response.status === 401) {
+      setAuthenticated(false);
+      setMessages([]);
+      setTypingUsers([]);
+      setReplyTo(null);
+      throw new Error("Session expired. Enter the secret word again.");
+    }
+
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+
+    const data = (await response.json()) as TypingResponse;
+    setTypingUsers(data.typing ?? []);
+  }, [myName]);
 
   useEffect(() => {
     let active = true;
@@ -215,13 +299,16 @@ export default function Home() {
 
   useEffect(() => {
     if (!authenticated) {
+      stopTyping();
+      setTypingUsers([]);
+      setReplyTo(null);
       return;
     }
 
     let active = true;
     const syncMessages = async () => {
       try {
-        await loadMessages();
+        await Promise.all([loadMessages(), loadTyping()]);
         if (active) {
           setChatMessage("");
         }
@@ -241,7 +328,7 @@ export default function Home() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [authenticated, loadMessages]);
+  }, [authenticated, loadMessages, loadTyping, stopTyping]);
 
   useEffect(() => {
     const lastMessageId = messages[messages.length - 1]?.id ?? null;
@@ -266,6 +353,12 @@ export default function Home() {
       }
     });
   }, [messages, scrollMessagesToBottom]);
+
+  useEffect(() => {
+    return () => {
+      stopTyping();
+    };
+  }, [stopTyping]);
 
   const onMessagesScroll = () => {
     const container = messagesRef.current;
@@ -319,10 +412,44 @@ export default function Home() {
     setAuthMessage("");
     setChatMessage("");
     try {
-      await loadMessages();
+      await Promise.all([loadMessages(), loadTyping()]);
     } catch (error) {
       setChatMessage(getErrorMessage(error));
     }
+  };
+
+  const onDraftChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setDraft(value);
+
+    if (!authenticated) {
+      return;
+    }
+
+    const hasText = value.trim().length > 0;
+    if (!hasText) {
+      stopTyping();
+      return;
+    }
+
+    if (
+      !typingSentRef.current ||
+      Date.now() - lastTypingPingRef.current > 2_200
+    ) {
+      typingSentRef.current = true;
+      lastTypingPingRef.current = Date.now();
+      void postTypingStatus(true);
+    }
+
+    if (typingTimerRef.current) {
+      window.clearTimeout(typingTimerRef.current);
+    }
+
+    typingTimerRef.current = window.setTimeout(() => {
+      typingTimerRef.current = null;
+      typingSentRef.current = false;
+      void postTypingStatus(false);
+    }, 2_300);
   };
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
@@ -336,6 +463,7 @@ export default function Home() {
       return;
     }
 
+    stopTyping();
     setSending(true);
     setChatMessage("");
     const response = await fetch("/api/messages", {
@@ -344,6 +472,7 @@ export default function Home() {
       body: JSON.stringify({
         content: cleaned,
         sender: myName,
+        replyToId: replyTo?.id ?? null,
       }),
     });
     setSending(false);
@@ -351,6 +480,8 @@ export default function Home() {
     if (response.status === 401) {
       setAuthenticated(false);
       setMessages([]);
+      setTypingUsers([]);
+      setReplyTo(null);
       setChatMessage("Session expired. Enter the secret word again.");
       return;
     }
@@ -366,13 +497,18 @@ export default function Home() {
     }
 
     setDraft("");
+    setReplyTo(null);
+    composerInputRef.current?.focus();
   };
 
   const signOut = async () => {
+    stopTyping();
     await fetch("/api/auth/logout", { method: "POST" });
     setAuthenticated(false);
     setLoadingSession(false);
     setMessages([]);
+    setTypingUsers([]);
+    setReplyTo(null);
     setDraft("");
     setSecretWord("");
     setAuthMessage("");
@@ -482,17 +618,39 @@ export default function Home() {
                   const mine =
                     normalizeName(message.sender_email).toLowerCase() ===
                     myName.toLowerCase();
+                  const repliedMessage = message.reply_to_id
+                    ? messagesById.get(message.reply_to_id) || null
+                    : null;
+
                   return (
                     <div
                       className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
                       key={message.id}
                     >
                       <article className={`bubble ${mine ? "mine" : "theirs"}`}>
+                        {repliedMessage && (
+                          <div className={`reply-preview ${mine ? "mine" : "theirs"}`}>
+                            <span>{normalizeName(repliedMessage.sender_email)}</span>
+                            <p>{repliedMessage.content}</p>
+                          </div>
+                        )}
                         <p>{message.content}</p>
                         <small>
                           {mine ? "You" : message.sender_email} -{" "}
                           {formatClock(message.created_at)}
                         </small>
+                        <div className="bubble-actions">
+                          <button
+                            type="button"
+                            className="reply-btn"
+                            onClick={() => {
+                              setReplyTo(message);
+                              composerInputRef.current?.focus();
+                            }}
+                          >
+                            Reply
+                          </button>
+                        </div>
                       </article>
                     </div>
                   );
@@ -515,12 +673,31 @@ export default function Home() {
             </div>
 
             <form className="composer" onSubmit={sendMessage}>
+              {replyTo && (
+                <div className="replying-to">
+                  <div>
+                    <strong>Replying to {normalizeName(replyTo.sender_email)}</strong>
+                    <p>{replyTo.content}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="reply-cancel"
+                    onClick={() => setReplyTo(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {typingLabel && <p className="typing-indicator">{typingLabel}</p>}
+
               <div className="composer-row">
                 <input
+                  ref={composerInputRef}
                   className="input"
                   type="text"
                   value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={onDraftChange}
                   placeholder="Write something lovely..."
                   maxLength={1000}
                 />

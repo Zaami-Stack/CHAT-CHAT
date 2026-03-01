@@ -6,12 +6,38 @@ create table if not exists public.messages (
   id bigint generated always as identity primary key,
   content text not null,
   sender_email text not null,
+  reply_to_id bigint,
   created_at timestamptz not null default timezone('utc', now()),
   constraint messages_non_empty check (char_length(trim(content)) between 1 and 1000),
   constraint messages_sender_non_empty check (char_length(trim(sender_email)) between 1 and 40)
 );
 
+alter table public.messages
+  add column if not exists reply_to_id bigint;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'messages_reply_to_id_fkey'
+  ) then
+    alter table public.messages
+      add constraint messages_reply_to_id_fkey
+      foreign key (reply_to_id)
+      references public.messages(id)
+      on delete set null;
+  end if;
+end $$;
+
+create table if not exists public.typing_status (
+  sender_name text primary key,
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint typing_sender_non_empty check (char_length(trim(sender_name)) between 1 and 40)
+);
+
 alter table public.messages enable row level security;
+alter table public.typing_status enable row level security;
 
 -- Remove old email-auth policies if you previously ran an older version.
 drop policy if exists "Couple can read messages" on public.messages;
