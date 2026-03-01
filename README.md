@@ -9,7 +9,7 @@ Private full-stack chat app for two people, built with:
 - You unlock chat with one shared secret word (example: `israe`).
 - No email login.
 - A signed HTTP-only cookie keeps the session.
-- Includes typing indicator and message replies.
+- Includes typing indicator, message replies, read receipts, date separators, and message controls (edit/delete/pin).
 
 ## 1) Supabase setup
 1. Create a Supabase project.

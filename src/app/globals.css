@@ -217,6 +217,54 @@ body {
   font-size: 0.86rem;
 }
 
+.pinned-strip {
+  display: grid;
+  gap: 0.42rem;
+  border-bottom: 1px solid rgba(95, 34, 66, 0.14);
+  padding: 0.7rem 1.3rem 0.75rem;
+}
+
+.pinned-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(106, 42, 74, 0.78);
+}
+
+.pinned-list {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.18rem;
+}
+
+.pinned-item {
+  min-width: 170px;
+  max-width: 270px;
+  border: 1px solid rgba(169, 67, 108, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.45rem 0.58rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pinned-item strong {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(100, 35, 70, 0.9);
+}
+
+.pinned-item p {
+  margin: 0.2rem 0 0;
+  font-size: 0.77rem;
+  color: rgba(78, 32, 57, 0.86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .messages-shell {
   position: relative;
   min-height: 0;
@@ -235,6 +283,24 @@ body {
   align-content: start;
   scrollbar-width: thin;
   scrollbar-color: rgba(180, 77, 124, 0.65) rgba(255, 255, 255, 0.35);
+}
+
+.date-divider {
+  display: grid;
+  place-items: center;
+  margin: 0.28rem 0 0.28rem;
+}
+
+.date-divider span {
+  display: inline-block;
+  border: 1px solid rgba(171, 66, 108, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  color: rgba(96, 39, 69, 0.8);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.18rem 0.58rem;
 }
 
 .messages::-webkit-scrollbar {
@@ -314,10 +380,26 @@ body {
   border-bottom-left-radius: 8px;
 }
 
+.bubble.pinned {
+  box-shadow:
+    0 0 0 1px rgba(180, 67, 112, 0.38),
+    0 8px 22px rgba(116, 44, 72, 0.14);
+}
+
 .bubble p {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.edit-box {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.35rem;
 }
 
 .reply-preview {
