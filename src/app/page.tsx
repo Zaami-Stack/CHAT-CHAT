@@ -1,8 +1,12 @@
 "use client";
 
-import type { Session } from "@supabase/supabase-js";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 type ChatMessage = {
   id: number;
@@ -26,15 +30,18 @@ const HEARTS = [
 ];
 
 const CHAT_TITLE = process.env.NEXT_PUBLIC_CHAT_TITLE?.trim() || "Our Love Chat";
-const PARTNER_NAME = process.env.NEXT_PUBLIC_PARTNER_NAME?.trim() || "Love";
 
-function getAllowedEmails() {
-  const raw = process.env.NEXT_PUBLIC_ALLOWED_EMAILS || "";
-  return raw
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-}
+type SessionResponse = {
+  authenticated: boolean;
+};
+
+type MessagesResponse = {
+  messages: ChatMessage[];
+};
+
+type MessageResponse = {
+  message: ChatMessage;
+};
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   const map = new Map<number, ChatMessage>();
@@ -59,186 +66,191 @@ function formatClock(dateString: string) {
   }).format(new Date(dateString));
 }
 
+function normalizeName(value: string) {
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  if (!cleaned) {
+    return "You";
+  }
+  return cleaned.slice(0, 40);
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Something went wrong.";
+}
+
+async function readError(response: Response) {
+  let text = "";
+  try {
+    text = await response.text();
+  } catch {
+    return `Request failed (${response.status}).`;
+  }
+
+  if (!text) {
+    return `Request failed (${response.status}).`;
+  }
+
+  try {
+    const parsed = JSON.parse(text) as { error?: string };
+    if (parsed.error) {
+      return parsed.error;
+    }
+  } catch {
+    return `Request failed (${response.status}).`;
+  }
+
+  return `Request failed (${response.status}).`;
+}
+
 export default function Home() {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const allowedEmails = useMemo(() => getAllowedEmails(), []);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loadingSession, setLoadingSession] = useState(Boolean(supabase));
-  const [authEmail, setAuthEmail] = useState("");
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
+  const [secretWord, setSecretWord] = useState("");
+  const [nickname, setNickname] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    return window.localStorage.getItem("lovechat_name") || "";
+  });
   const [authMessage, setAuthMessage] = useState("");
-  const [resendAt, setResendAt] = useState<number>(0);
-  const [nowMs, setNowMs] = useState(() => Date.now());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const userEmail = session?.user?.email?.toLowerCase() || "";
-  const isAllowed =
-    !userEmail || allowedEmails.length === 0 || allowedEmails.includes(userEmail);
-  const secondsLeft = resendAt
-    ? Math.max(0, Math.ceil((resendAt - nowMs) / 1000))
-    : 0;
+  const myName = normalizeName(nickname);
+
+  const loadMessages = useCallback(async () => {
+    const response = await fetch("/api/messages", { cache: "no-store" });
+    if (response.status === 401) {
+      setAuthenticated(false);
+      setMessages([]);
+      throw new Error("Session expired. Enter the secret word again.");
+    }
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+    const data = (await response.json()) as MessagesResponse;
+    setMessages((previous) => mergeMessages(previous, data.messages ?? []));
+  }, []);
 
   useEffect(() => {
-    if (!supabase) {
-      return;
-    }
-
-    let isActive = true;
-
+    let active = true;
     const syncSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!isActive) {
-        return;
+      try {
+        const response = await fetch("/api/auth/session", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        const data = (await response.json()) as SessionResponse;
+        if (!active) {
+          return;
+        }
+        setAuthenticated(Boolean(data.authenticated));
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setAuthMessage(getErrorMessage(error));
+      } finally {
+        if (active) {
+          setLoadingSession(false);
+        }
       }
-
-      if (error) {
-        setAuthMessage(error.message);
-      }
-
-      setSession(data.session);
-      setLoadingSession(false);
     };
-
     void syncSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      if (!isActive) {
-        return;
-      }
-      setSession(currentSession);
-      setAuthMessage("");
-    });
-
     return () => {
-      isActive = false;
-      subscription.unsubscribe();
+      active = false;
     };
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
-    if (!supabase || !session?.user || !isAllowed) {
+    if (!authenticated) {
       return;
     }
 
-    let isActive = true;
-
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("id, content, sender_email, created_at")
-        .order("created_at", { ascending: true })
-        .limit(300);
-
-      if (!isActive) {
-        return;
+    let active = true;
+    const syncMessages = async () => {
+      try {
+        await loadMessages();
+        if (active) {
+          setChatMessage("");
+        }
+      } catch (error) {
+        if (active) {
+          setChatMessage(getErrorMessage(error));
+        }
       }
-
-      if (error) {
-        setChatMessage(error.message);
-        return;
-      }
-
-      setMessages((previous) => mergeMessages(previous, data ?? []));
     };
 
-    void loadMessages();
-
-    const channel = supabase
-      .channel("our-love-chat")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const incoming = payload.new as ChatMessage;
-          setMessages((previous) => mergeMessages(previous, [incoming]));
-        },
-      )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR") {
-          setChatMessage("Realtime connection dropped. Refresh the page.");
-        }
-      });
+    void syncMessages();
+    const timer = window.setInterval(() => {
+      void syncMessages();
+    }, 2500);
 
     return () => {
-      isActive = false;
-      void supabase.removeChannel(channel);
+      active = false;
+      window.clearInterval(timer);
     };
-  }, [supabase, session?.user, isAllowed]);
+  }, [authenticated, loadMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (!resendAt) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      const nextNow = Date.now();
-      setNowMs(nextNow);
-      if (nextNow >= resendAt) {
-        setResendAt(0);
-        window.clearInterval(timer);
-      }
-    }, 1000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [resendAt]);
-
-  const requestMagicLink = async (event: FormEvent<HTMLFormElement>) => {
+  const signInWithWord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) {
-      return;
-    }
-    if (secondsLeft > 0) {
-      setAuthMessage(`Please wait ${secondsLeft}s before requesting another link.`);
+    if (authenticating) {
       return;
     }
 
-    const cleaned = authEmail.trim().toLowerCase();
-    if (!cleaned) {
-      setAuthMessage("Enter your email first.");
+    const passphrase = secretWord.trim();
+    if (!passphrase) {
+      setAuthMessage("Enter the secret word.");
       return;
     }
 
-    setAuthMessage("Sending magic link...");
-    const { error } = await supabase.auth.signInWithOtp({
-      email: cleaned,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+    setAuthenticating(true);
+    setAuthMessage("Checking secret word...");
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ passphrase }),
     });
 
-    if (error) {
-      const raw = error.message.toLowerCase();
-      if (raw.includes("email rate limit exceeded")) {
-        setAuthMessage(
-          "Too many email requests. Wait a bit, then try again. If this is frequent, use custom SMTP in Supabase Auth.",
-        );
-      } else {
-        setAuthMessage(error.message);
-      }
+    setAuthenticating(false);
+
+    if (!response.ok) {
+      setAuthMessage(await readError(response));
       return;
     }
 
-    setResendAt(Date.now() + 60_000);
-    setAuthMessage("Magic link sent. Open your email to continue.");
+    const name = normalizeName(nickname);
+    if (name) {
+      window.localStorage.setItem("lovechat_name", name);
+      setNickname(name);
+    }
+
+    setAuthenticated(true);
+    setSecretWord("");
+    setAuthMessage("");
+    setChatMessage("");
+    try {
+      await loadMessages();
+    } catch (error) {
+      setChatMessage(getErrorMessage(error));
+    }
   };
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase || !session?.user) {
-      return;
-    }
-    const senderEmail = session.user.email?.toLowerCase();
-    if (!senderEmail) {
-      setChatMessage("Your account is missing an email address.");
+    if (!authenticated) {
       return;
     }
 
@@ -249,40 +261,46 @@ export default function Home() {
 
     setSending(true);
     setChatMessage("");
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
+    const response = await fetch("/api/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
         content: cleaned,
-        sender_email: senderEmail,
-      })
-      .select("id, content, sender_email, created_at")
-      .single();
-
+        sender: myName,
+      }),
+    });
     setSending(false);
 
-    if (error) {
-      setChatMessage(error.message);
+    if (response.status === 401) {
+      setAuthenticated(false);
+      setMessages([]);
+      setChatMessage("Session expired. Enter the secret word again.");
       return;
     }
 
-    if (data) {
-      setMessages((previous) => mergeMessages(previous, [data]));
+    if (!response.ok) {
+      setChatMessage(await readError(response));
+      return;
     }
+
+    const data = (await response.json()) as MessageResponse;
+    if (data.message) {
+      setMessages((previous) => mergeMessages(previous, [data.message]));
+    }
+
     setDraft("");
   };
 
   const signOut = async () => {
-    if (!supabase) {
-      return;
-    }
-    await supabase.auth.signOut();
-    setSession(null);
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthenticated(false);
+    setLoadingSession(false);
     setMessages([]);
     setDraft("");
+    setSecretWord("");
+    setAuthMessage("");
     setChatMessage("");
   };
-
-  const missingEnv = !supabase;
 
   return (
     <div className="romance-page">
@@ -308,76 +326,67 @@ export default function Home() {
       </div>
 
       <main className="chat-shell">
-        {missingEnv && (
-          <section className="glass-panel login-card">
-            <h1 className="title">Setup needed</h1>
-            <p className="hint">
-              Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-              <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in your environment.
-            </p>
-          </section>
-        )}
-
-        {!missingEnv && loadingSession && (
+        {loadingSession && (
           <section className="glass-panel login-card">
             <h1 className="title">Loading your love space...</h1>
           </section>
         )}
 
-        {!missingEnv && !loadingSession && !session?.user && (
+        {!loadingSession && !authenticated && (
           <section className="glass-panel login-card">
             <div>
               <h1 className="title">{CHAT_TITLE}</h1>
               <p className="subtitle">
-                A private chat for just the two of you. Sign in with your email and
-                the magic link.
+                A private chat for just the two of you. Enter your shared secret
+                word to unlock it.
               </p>
             </div>
 
-            <form className="stack" onSubmit={requestMagicLink}>
-              <label className="label" htmlFor="email">
-                Your email
+            <form className="stack" onSubmit={signInWithWord}>
+              <label className="label" htmlFor="secretWord">
+                Secret word
               </label>
               <input
-                id="email"
+                id="secretWord"
                 className="input"
-                type="email"
-                autoComplete="email"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="you@example.com"
+                type="password"
+                autoComplete="off"
+                value={secretWord}
+                onChange={(event) => setSecretWord(event.target.value)}
+                placeholder="Enter your secret word"
                 required
+              />
+              <label className="label" htmlFor="nickname">
+                Your name
+              </label>
+              <input
+                id="nickname"
+                className="input"
+                type="text"
+                autoComplete="off"
+                value={nickname}
+                onChange={(event) => setNickname(event.target.value)}
+                placeholder="Your nickname"
+                maxLength={40}
               />
               <button
                 className="btn btn-primary"
                 type="submit"
-                disabled={secondsLeft > 0}
+                disabled={authenticating}
               >
-                {secondsLeft > 0 ? `Wait ${secondsLeft}s` : "Send magic link"}
+                {authenticating ? "Checking..." : "Enter chat"}
               </button>
               <p className="hint">{authMessage}</p>
             </form>
           </section>
         )}
 
-        {!missingEnv && !loadingSession && session?.user && !isAllowed && (
-          <section className="glass-panel login-card">
-            <h1 className="title">Access denied</h1>
-            <p className="hint error">
-              {session.user.email} is not in the allowed list for this private chat.
-            </p>
-            <button type="button" className="btn btn-muted" onClick={signOut}>
-              Sign out
-            </button>
-          </section>
-        )}
-
-        {!missingEnv && !loadingSession && session?.user && isAllowed && (
+        {!loadingSession && authenticated && (
           <section className="glass-panel chat-card">
             <header className="chat-head">
               <div>
                 <h2>{CHAT_TITLE}</h2>
-                <p className="meta">Logged in as {session.user.email}</p>
+                <p className="meta">Signed in as {myName}</p>
               </div>
               <button type="button" className="btn btn-muted" onClick={signOut}>
                 Sign out
@@ -394,8 +403,8 @@ export default function Home() {
 
               {messages.map((message) => {
                 const mine =
-                  message.sender_email.toLowerCase() ===
-                  (session.user.email || "").toLowerCase();
+                  normalizeName(message.sender_email).toLowerCase() ===
+                  myName.toLowerCase();
                 return (
                   <div
                     className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
@@ -404,7 +413,8 @@ export default function Home() {
                     <article className={`bubble ${mine ? "mine" : "theirs"}`}>
                       <p>{message.content}</p>
                       <small>
-                        {mine ? "You" : PARTNER_NAME} - {formatClock(message.created_at)}
+                        {mine ? "You" : message.sender_email} -{" "}
+                        {formatClock(message.created_at)}
                       </small>
                     </article>
                   </div>
