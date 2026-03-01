@@ -904,22 +904,35 @@ export default function Home() {
 
             {pinnedMessages.length > 0 && (
               <div className="pinned-strip">
-                <span className="pinned-title">Pinned</span>
+                <div className="pinned-head">
+                  <span className="pinned-title">Pinned Messages</span>
+                  <span className="pinned-count">{pinnedMessages.length}</span>
+                </div>
                 <div className="pinned-list">
-                  {pinnedMessages.map((message) => (
-                    <button
-                      key={message.id}
-                      type="button"
-                      className="pinned-item"
-                      onClick={() => {
-                        const target = document.getElementById(`msg-${message.id}`);
-                        target?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }}
-                    >
-                      <strong>{normalizeName(message.sender_email)}</strong>
-                      <p>{previewText(message.content)}</p>
-                    </button>
-                  ))}
+                  {pinnedMessages.map((message) => {
+                    const mine =
+                      normalizeName(message.sender_email).toLowerCase() === myNameLower;
+                    return (
+                      <button
+                        key={message.id}
+                        type="button"
+                        className={`pinned-item ${mine ? "mine" : "theirs"}`}
+                        onClick={() => {
+                          const target = document.getElementById(`msg-${message.id}`);
+                          target?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
+                      >
+                        <div className="pinned-item-top">
+                          <strong>{mine ? "You" : normalizeName(message.sender_email)}</strong>
+                          <small>
+                            {formatDayLabel(message.created_at)} -{" "}
+                            {formatClock(message.created_at)}
+                          </small>
+                        </div>
+                        <p>{previewText(message.content)}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

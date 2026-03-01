@@ -219,50 +219,132 @@ body {
 
 .pinned-strip {
   display: grid;
-  gap: 0.42rem;
+  gap: 0.55rem;
   border-bottom: 1px solid rgba(95, 34, 66, 0.14);
-  padding: 0.7rem 1.3rem 0.75rem;
+  padding: 0.72rem 1.3rem 0.85rem;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.44) 0%,
+      rgba(255, 255, 255, 0.16) 100%
+    );
+}
+
+.pinned-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .pinned-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(106, 42, 74, 0.88);
+}
+
+.pinned-count {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(106, 42, 74, 0.78);
+  background: linear-gradient(130deg, #da5f90 0%, #af3a6a 100%);
+  color: #fff9fc;
 }
 
 .pinned-list {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.58rem;
   overflow-x: auto;
-  padding-bottom: 0.18rem;
+  padding-bottom: 0.24rem;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(176, 70, 115, 0.58) rgba(255, 255, 255, 0.26);
+}
+
+.pinned-list::-webkit-scrollbar {
+  height: 8px;
+}
+
+.pinned-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+}
+
+.pinned-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, rgba(222, 90, 146, 0.9), rgba(159, 51, 98, 0.9));
+  border-radius: 999px;
 }
 
 .pinned-item {
-  min-width: 170px;
-  max-width: 270px;
-  border: 1px solid rgba(169, 67, 108, 0.18);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.5);
-  padding: 0.45rem 0.58rem;
+  min-width: clamp(220px, 45vw, 310px);
+  max-width: 340px;
+  border: 1px solid rgba(169, 67, 108, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0.58rem 0.68rem 0.62rem;
   text-align: left;
   cursor: pointer;
+  scroll-snap-align: start;
+  box-shadow: 0 6px 18px rgba(140, 56, 94, 0.14);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.pinned-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(169, 67, 108, 0.36);
+  box-shadow: 0 10px 20px rgba(129, 45, 84, 0.22);
+}
+
+.pinned-item.mine {
+  background: linear-gradient(
+    155deg,
+    rgba(241, 134, 176, 0.26) 0%,
+    rgba(250, 230, 240, 0.78) 100%
+  );
+}
+
+.pinned-item.theirs {
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(251, 239, 233, 0.8) 100%
+  );
+}
+
+.pinned-item-top {
+  display: grid;
+  gap: 0.1rem;
+  margin-bottom: 0.3rem;
 }
 
 .pinned-item strong {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
   color: rgba(100, 35, 70, 0.9);
 }
 
+.pinned-item small {
+  font-size: 0.68rem;
+  color: rgba(108, 49, 79, 0.72);
+}
+
 .pinned-item p {
-  margin: 0.2rem 0 0;
-  font-size: 0.77rem;
-  color: rgba(78, 32, 57, 0.86);
-  white-space: nowrap;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.28;
+  color: rgba(78, 32, 57, 0.9);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .messages-shell {
@@ -566,5 +648,10 @@ body {
 
   .bubble {
     max-width: 88%;
+  }
+
+  .pinned-strip {
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
   }
 }
