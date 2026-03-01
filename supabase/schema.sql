@@ -68,8 +68,14 @@ alter table public.message_reads enable row level security;
 -- Remove old email-auth policies if you previously ran an older version.
 drop policy if exists "Couple can read messages" on public.messages;
 drop policy if exists "Couple can send messages" on public.messages;
-drop policy if exists "Couple can read profiles" on public.couple_profiles;
-drop policy if exists "Couple can insert self profile" on public.couple_profiles;
+
+do $$
+begin
+  if to_regclass('public.couple_profiles') is not null then
+    drop policy if exists "Couple can read profiles" on public.couple_profiles;
+    drop policy if exists "Couple can insert self profile" on public.couple_profiles;
+  end if;
+end $$;
 
 -- Optional cleanup for old setup.
 drop function if exists public.is_couple_member();
