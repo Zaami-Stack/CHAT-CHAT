@@ -190,6 +190,9 @@ body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: min(85vh, 900px);
+  height: min(85vh, 900px);
+  max-height: calc(100dvh - 4.4rem);
+  overflow: hidden;
 }
 
 .chat-head {
@@ -217,12 +220,15 @@ body {
 .messages-shell {
   position: relative;
   min-height: 0;
+  height: 100%;
 }
 
 .messages {
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 1.15rem 1.3rem;
   display: grid;
   gap: 0.7rem;
@@ -375,6 +381,12 @@ body {
 @media (max-width: 720px) {
   .romance-page {
     padding: 0.6rem;
+  }
+
+  .chat-card {
+    min-height: 0;
+    height: calc(100dvh - 1.2rem);
+    max-height: calc(100dvh - 1.2rem);
   }
 
   .chat-head h2 {
